@@ -8,15 +8,18 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using Mendix.StudioPro.ExtensionsAPI.UI.Menu;
 using Mendix.StudioPro.ExtensionsAPI.UI.Services;
 
 namespace TwoWaySqlExtension;
 
 [Export(typeof(MenuExtension))]
-public class OpenSqlFileMenuExtension : MenuExtension
+public class OpenSqlFileMenuExtension : MenuExtension, IDisposable
 {
     private readonly IDockingWindowService _dockingWindowService;
+    private Thread? _hotKeyThread;
+    private volatile bool _isRunning = true;
 
     // パラメータ名（小文字で定義）と対象サブフォルダの定義
     private static readonly (string ParamKey, string SubDir)[] SupportedActions = new[]
@@ -25,25 +28,101 @@ public class OpenSqlFileMenuExtension : MenuExtension
         ("saferoqlfilename", Path.Combine("resources", "saferoql"))
     };
 
-    // Win32 MessageBox P/Invoke
+    // Win32 API 定義
     [DllImport("user32.dll", EntryPoint = "MessageBoxW", CharSet = CharSet.Unicode)]
     private static extern int Win32MessageBox(IntPtr hWnd, string text, string caption, uint type);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+    [DllImport("user32.dll")]
+    private static extern int GetMessage(out MSG lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax);
+
+    [DllImport("user32.dll")]
+    private static extern bool TranslateMessage([In] ref MSG lpMsg);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr DispatchMessage([In] ref MSG lpMsg);
+
+    [DllImport("user32.dll")]
+    private static extern bool PostThreadMessage(uint idThread, uint Msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT
+    {
+        public int x;
+        public int y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MSG
+    {
+        public IntPtr hwnd;
+        public uint message;
+        public IntPtr wParam;
+        public IntPtr lParam;
+        public uint time;
+        public POINT pt;
+    }
 
     private const uint MB_OK = 0x00000000;
     private const uint MB_ICONERROR = 0x00000010;
     private const uint MB_ICONWARNING = 0x00000030;
     private const uint MB_ICONINFORMATION = 0x00000040;
 
+    private const int WM_HOTKEY = 0x0312;
+    private const uint WM_QUIT = 0x0012;
+    private const uint MOD_CONTROL = 0x0002;
+    private const uint MOD_SHIFT = 0x0004;
+    private const uint VK_L = 0x4C; // 'L' キー
+    private const int HOTKEY_ID = 9182;
+    private uint _hotKeyThreadId;
+
     [ImportingConstructor]
     public OpenSqlFileMenuExtension(IDockingWindowService dockingWindowService)
     {
         _dockingWindowService = dockingWindowService;
+        StartHotKeyListener();
+    }
+
+    private void StartHotKeyListener()
+    {
+        _hotKeyThread = new Thread(() =>
+        {
+            _hotKeyThreadId = GetCurrentThreadId();
+            if (!RegisterHotKey(IntPtr.Zero, HOTKEY_ID, MOD_CONTROL | MOD_SHIFT, VK_L))
+            {
+                return;
+            }
+
+            while (_isRunning && GetMessage(out MSG msg, IntPtr.Zero, 0, 0) > 0)
+            {
+                if (msg.message == WM_HOTKEY && msg.wParam.ToInt32() == HOTKEY_ID)
+                {
+                    Execute();
+                }
+                TranslateMessage(ref msg);
+                DispatchMessage(ref msg);
+            }
+
+            UnregisterHotKey(IntPtr.Zero, HOTKEY_ID);
+        })
+        {
+            IsBackground = true
+        };
+        _hotKeyThread.Start();
     }
 
     public override IEnumerable<MenuViewModel> GetMenus()
     {
         yield return new MenuViewModel(
-            "Open SQL/OQL File in External Editor",
+            "Open SQL/OQL File in External Editor (Ctrl+Shift+L)",
             Execute
         );
     }
@@ -176,7 +255,6 @@ public class OpenSqlFileMenuExtension : MenuExtension
             }
             else
             {
-                // Selection オブジェクト内部のコレクションプロパティ（Objects, Elements など）を走査
                 foreach (var p in selection.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
                 {
                     if (p.GetIndexParameters().Length > 0) continue;
@@ -236,7 +314,6 @@ public class OpenSqlFileMenuExtension : MenuExtension
     {
         if (targetObj == null) return null;
 
-        // ActionActivity またはその内部の Action を取得
         var actionProp = targetObj.GetType().GetProperty("Action", BindingFlags.Public | BindingFlags.Instance);
         var action = actionProp?.GetValue(targetObj) ?? targetObj;
 
@@ -305,5 +382,14 @@ public class OpenSqlFileMenuExtension : MenuExtension
     private static void ShowDialog(string message, uint iconType)
     {
         Win32MessageBox(IntPtr.Zero, message, "TwoWaySQL / SaferOQL Extension", MB_OK | iconType);
+    }
+
+    public void Dispose()
+    {
+        _isRunning = false;
+        if (_hotKeyThreadId != 0)
+        {
+            PostThreadMessage(_hotKeyThreadId, WM_QUIT, IntPtr.Zero, IntPtr.Zero);
+        }
     }
 }
