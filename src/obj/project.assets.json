@@ -362,9 +362,9 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\github\\MxTwoWaySqlExtension\\src\\src.csproj",
-      "projectName": "src",
-      "projectPath": "C:\\github\\MxTwoWaySqlExtension\\src\\src.csproj",
+      "projectUniqueName": "C:\\github\\MxTwoWaySqlExtension\\src\\MxTwoWaySqlExtension.csproj",
+      "projectName": "MxTwoWaySqlExtension",
+      "projectPath": "C:\\github\\MxTwoWaySqlExtension\\src\\MxTwoWaySqlExtension.csproj",
       "packagesPath": "C:\\Users\\s41705\\.nuget\\packages\\",
       "outputPath": "C:\\github\\MxTwoWaySqlExtension\\src\\obj\\",
       "projectStyle": "PackageReference",

@@ -1,0 +1,13 @@
+C:\github\MxTwoWaySqlExtension\src\obj\Release\net10.0\MxTwoWaySqlExtension.csproj.AssemblyReference.cache
+C:\github\MxTwoWaySqlExtension\src\obj\Release\net10.0\MxTwoWaySqlExtension.GeneratedMSBuildEditorConfig.editorconfig
+C:\github\MxTwoWaySqlExtension\src\obj\Release\net10.0\MxTwoWaySqlExtension.AssemblyInfoInputs.cache
+C:\github\MxTwoWaySqlExtension\src\obj\Release\net10.0\MxTwoWaySqlExtension.AssemblyInfo.cs
+C:\github\MxTwoWaySqlExtension\src\obj\Release\net10.0\MxTwoWaySqlExtension.csproj.CoreCompileInputs.cache
+C:\github\MxTwoWaySqlExtension\src\obj\Release\net10.0\MxTwoWaySqlExtension.sourcelink.json
+C:\github\MxTwoWaySqlExtension\src\bin\Release\net10.0\MxTwoWaySqlExtension.deps.json
+C:\github\MxTwoWaySqlExtension\src\bin\Release\net10.0\MxTwoWaySqlExtension.dll
+C:\github\MxTwoWaySqlExtension\src\bin\Release\net10.0\MxTwoWaySqlExtension.pdb
+C:\github\MxTwoWaySqlExtension\src\obj\Release\net10.0\MxTwoWaySqlExtension.dll
+C:\github\MxTwoWaySqlExtension\src\obj\Release\net10.0\refint\MxTwoWaySqlExtension.dll
+C:\github\MxTwoWaySqlExtension\src\obj\Release\net10.0\MxTwoWaySqlExtension.pdb
+C:\github\MxTwoWaySqlExtension\src\obj\Release\net10.0\ref\MxTwoWaySqlExtension.dll

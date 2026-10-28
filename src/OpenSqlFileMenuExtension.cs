@@ -12,31 +12,43 @@ using System.Threading;
 using Mendix.StudioPro.ExtensionsAPI.UI.Menu;
 using Mendix.StudioPro.ExtensionsAPI.UI.Services;
 
-namespace TwoWaySqlExtension;
+namespace MxTwoWaySqlExtension;
 
 [Export(typeof(MenuExtension))]
 public class OpenSqlFileMenuExtension : MenuExtension, IDisposable
 {
     private readonly IDockingWindowService _dockingWindowService;
-    private Thread? _hotKeyThread;
+    private Thread? _hookThread;
     private volatile bool _isRunning = true;
+    private IntPtr _hookId = IntPtr.Zero;
+    private HookProc? _hookProc; // GC回収防止用参照保持
 
-    // パラメータ名（小文字で定義）と対象サブフォルダの定義
     private static readonly (string ParamKey, string SubDir)[] SupportedActions = new[]
     {
         ("twowaysqlfilename", Path.Combine("resources", "sql")),
         ("saferoqlfilename", Path.Combine("resources", "saferoql"))
     };
 
-    // Win32 API 定義
+    // --- Win32 API 定義 ---
     [DllImport("user32.dll", EntryPoint = "MessageBoxW", CharSet = CharSet.Unicode)]
     private static extern int Win32MessageBox(IntPtr hWnd, string text, string caption, uint type);
 
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+    private delegate IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam);
 
     [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+    private static extern IntPtr SetWindowsHookEx(int idHook, HookProc lpfn, IntPtr hMod, uint dwThreadId);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    private static extern IntPtr GetModuleHandle(string? lpModuleName);
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
 
     [DllImport("user32.dll")]
     private static extern int GetMessage(out MSG lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax);
@@ -52,6 +64,12 @@ public class OpenSqlFileMenuExtension : MenuExtension, IDisposable
 
     [DllImport("kernel32.dll")]
     private static extern uint GetCurrentThreadId();
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct POINT
@@ -71,52 +89,87 @@ public class OpenSqlFileMenuExtension : MenuExtension, IDisposable
         public POINT pt;
     }
 
+    private const int WH_KEYBOARD_LL = 13;
+    private const int WM_KEYDOWN = 0x0100;
+    private const int WM_SYSKEYDOWN = 0x0104;
+    private const uint WM_QUIT = 0x0012;
+
+    private const int VK_SHIFT = 0x10;
+    private const int VK_CONTROL = 0x11;
+    private const int VK_L = 0x4C;
+
     private const uint MB_OK = 0x00000000;
     private const uint MB_ICONERROR = 0x00000010;
     private const uint MB_ICONWARNING = 0x00000030;
     private const uint MB_ICONINFORMATION = 0x00000040;
 
-    private const int WM_HOTKEY = 0x0312;
-    private const uint WM_QUIT = 0x0012;
-    private const uint MOD_CONTROL = 0x0002;
-    private const uint MOD_SHIFT = 0x0004;
-    private const uint VK_L = 0x4C; // 'L' キー
-    private const int HOTKEY_ID = 9182;
-    private uint _hotKeyThreadId;
+    private uint _hookThreadId;
 
     [ImportingConstructor]
     public OpenSqlFileMenuExtension(IDockingWindowService dockingWindowService)
     {
         _dockingWindowService = dockingWindowService;
-        StartHotKeyListener();
+        StartHookListener();
     }
 
-    private void StartHotKeyListener()
+    private void StartHookListener()
     {
-        _hotKeyThread = new Thread(() =>
+        _hookThread = new Thread(() =>
         {
-            _hotKeyThreadId = GetCurrentThreadId();
-            if (!RegisterHotKey(IntPtr.Zero, HOTKEY_ID, MOD_CONTROL | MOD_SHIFT, VK_L))
-            {
-                return;
-            }
+            _hookThreadId = GetCurrentThreadId();
+            _hookProc = HookCallback;
+
+            using var curProcess = Process.GetCurrentProcess();
+            using var curModule = curProcess.MainModule;
+            var modHandle = GetModuleHandle(curModule?.ModuleName);
+
+            _hookId = SetWindowsHookEx(WH_KEYBOARD_LL, _hookProc, modHandle, 0);
 
             while (_isRunning && GetMessage(out MSG msg, IntPtr.Zero, 0, 0) > 0)
             {
-                if (msg.message == WM_HOTKEY && msg.wParam.ToInt32() == HOTKEY_ID)
-                {
-                    Execute();
-                }
                 TranslateMessage(ref msg);
                 DispatchMessage(ref msg);
             }
 
-            UnregisterHotKey(IntPtr.Zero, HOTKEY_ID);
+            if (_hookId != IntPtr.Zero)
+            {
+                UnhookWindowsHookEx(_hookId);
+            }
         })
         {
             IsBackground = true
         };
-        _hotKeyThread.Start();
+        _hookThread.Start();
+    }
+
+    private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+    {
+        if (nCode >= 0 && (wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN))
+        {
+            int vkCode = Marshal.ReadInt32(lParam);
+
+            if (vkCode == VK_L)
+            {
+                bool isCtrlDown = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+                bool isShiftDown = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+
+                if (isCtrlDown && isShiftDown)
+                {
+                    // 最前面のウィンドウがこの Studio Pro インスタンスか判定
+                    var fgWnd = GetForegroundWindow();
+                    GetWindowThreadProcessId(fgWnd, out uint fgPid);
+
+                    if (fgPid == (uint)Process.GetCurrentProcess().Id)
+                    {
+                        // 非同期実行してキーボード入力をブロックしない
+                        ThreadPool.QueueUserWorkItem(_ => Execute());
+                        return (IntPtr)1; // 入力を消費して他への伝搬を抑止
+                    }
+                }
+            }
+        }
+
+        return CallNextHookEx(_hookId, nCode, wParam, lParam);
     }
 
     public override IEnumerable<MenuViewModel> GetMenus()
@@ -193,12 +246,10 @@ public class OpenSqlFileMenuExtension : MenuExtension, IDisposable
 
                 if (allMatches.Count > 1)
                 {
-                    // 2個以上あり、かつ未選択の場合は誤操作防止のため警告
                     ShowDialog($"Multiple ({allMatches.Count}) query actions found in this Microflow.\nPlease select the specific action on the canvas to open.", MB_ICONWARNING);
                     return;
                 }
 
-                // ちょうど1個だけの場合は自動採用
                 targetInfo = allMatches[0];
             }
 
@@ -241,7 +292,6 @@ public class OpenSqlFileMenuExtension : MenuExtension, IDisposable
 
         var editorType = editor.GetType();
 
-        // 1. Selection プロパティを確認 (Mendix.Modeler.Common.Selection)
         var selectionProp = editorType.GetProperty("Selection", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
         var selection = selectionProp?.GetValue(editor);
         if (selection != null)
@@ -274,7 +324,6 @@ public class OpenSqlFileMenuExtension : MenuExtension, IDisposable
             }
         }
 
-        // 2. SelectedObject プロパティを確認
         var selectedObjProp = editorType.GetProperty("SelectedObject", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
         var selectedObj = selectedObjProp?.GetValue(editor);
         if (selectedObj != null && !result.Contains(selectedObj))
@@ -387,9 +436,9 @@ public class OpenSqlFileMenuExtension : MenuExtension, IDisposable
     public void Dispose()
     {
         _isRunning = false;
-        if (_hotKeyThreadId != 0)
+        if (_hookThreadId != 0)
         {
-            PostThreadMessage(_hotKeyThreadId, WM_QUIT, IntPtr.Zero, IntPtr.Zero);
+            PostThreadMessage(_hookThreadId, WM_QUIT, IntPtr.Zero, IntPtr.Zero);
         }
     }
 }

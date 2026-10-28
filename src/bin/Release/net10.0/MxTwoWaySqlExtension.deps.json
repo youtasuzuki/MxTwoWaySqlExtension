@@ -6,12 +6,12 @@
   "compilationOptions": {},
   "targets": {
     ".NETCoreApp,Version=v10.0": {
-      "src/1.0.0": {
+      "MxTwoWaySqlExtension/1.0.0": {
         "dependencies": {
           "Mendix.StudioPro.ExtensionsAPI": "11.12.0"
         },
         "runtime": {
-          "src.dll": {}
+          "MxTwoWaySqlExtension.dll": {}
         }
       },
       "Mendix.StudioPro.ExtensionsAPI/11.12.0": {
@@ -139,7 +139,7 @@
     }
   },
   "libraries": {
-    "src/1.0.0": {
+    "MxTwoWaySqlExtension/1.0.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
