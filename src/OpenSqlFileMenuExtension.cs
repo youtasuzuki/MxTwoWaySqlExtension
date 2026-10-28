@@ -18,7 +18,7 @@ public class OpenSqlFileMenuExtension : MenuExtension
 {
     private readonly IDockingWindowService _dockingWindowService;
 
-    // パラメータ名（小文字判定キー）と対象サブフォルダの定義
+    // パラメータ名（小文字で定義）と対象サブフォルダの定義
     private static readonly (string ParamKey, string SubDir)[] SupportedActions = new[]
     {
         ("twowaysqlfilename", Path.Combine("resources", "sql")),
@@ -66,13 +66,20 @@ public class OpenSqlFileMenuExtension : MenuExtension
                 return;
             }
 
-            // 2. アクティブなエディタおよびドキュメントの取得
+            // 2. アクティブなエディタ・タブの取得
             var docEditorManagerField = dockType.GetField("<documentEditorManager>P", BindingFlags.NonPublic | BindingFlags.Instance);
             var docEditorManager = docEditorManagerField?.GetValue(_dockingWindowService);
-            var activeEditorProp = docEditorManager?.GetType().GetProperty("ActiveEditor", BindingFlags.Public | BindingFlags.Instance);
-            var activeEditor = activeEditorProp?.GetValue(docEditorManager);
 
-            var getActiveDocMethod = docEditorManager?.GetType().GetMethod("GetActiveDocument", BindingFlags.Public | BindingFlags.Instance);
+            if (docEditorManager == null)
+            {
+                ShowDialog("No document editor manager found.", MB_ICONWARNING);
+                return;
+            }
+
+            var activeTabField = docEditorManager.GetType().GetField("activeTab", BindingFlags.NonPublic | BindingFlags.Instance);
+            var activeTab = activeTabField?.GetValue(docEditorManager);
+
+            var getActiveDocMethod = docEditorManager.GetType().GetMethod("GetActiveDocument", BindingFlags.Public | BindingFlags.Instance);
             var activeDoc = getActiveDocMethod?.Invoke(docEditorManager, null);
 
             if (activeDoc == null)
@@ -81,8 +88,8 @@ public class OpenSqlFileMenuExtension : MenuExtension
                 return;
             }
 
-            // 3. 選択要素の判定
-            var selectedObjects = GetSelectedObjects(activeEditor);
+            // 3. 選択要素の判定 (Editor -> Selection / SelectedObject)
+            var selectedObjects = GetSelectedObjectsFromActiveTab(activeTab);
 
             (string RawPath, string SubDir)? targetInfo = null;
             if (selectedObjects.Count > 0)
@@ -94,7 +101,7 @@ public class OpenSqlFileMenuExtension : MenuExtension
                 }
             }
 
-            // 選択アクションから取れなかった場合、Microflow 全体を走査
+            // 4. 選択要素に対象アクションがない場合、Microflow 全体を走査
             if (targetInfo == null)
             {
                 var allMatches = FindAllMatchingActionsInMicroflow(activeDoc);
@@ -107,21 +114,21 @@ public class OpenSqlFileMenuExtension : MenuExtension
 
                 if (allMatches.Count > 1)
                 {
-                    // 複数存在する場合は誤操作防止のため選択を促す警告
-                    ShowDialog($"Multiple ({allMatches.Count}) query actions found in this Microflow.\nPlease select the specific action you want to open.", MB_ICONWARNING);
+                    // 2個以上あり、かつ未選択の場合は誤操作防止のため警告
+                    ShowDialog($"Multiple ({allMatches.Count}) query actions found in this Microflow.\nPlease select the specific action on the canvas to open.", MB_ICONWARNING);
                     return;
                 }
 
-                // 1つだけの場合は自動採用
+                // ちょうど1個だけの場合は自動採用
                 targetInfo = allMatches[0];
             }
 
-            // 4. パスの正規化
+            // 5. パスの正規化
             var cleanRelativePath = targetInfo.Value.RawPath.Trim('\'', '"', ' ', '\r', '\n')
                                                            .Replace('/', Path.DirectorySeparatorChar)
                                                            .Replace('\\', Path.DirectorySeparatorChar);
 
-            // 5. resources/ 配下の絶対パス組み立て
+            // 6. resources/ 配下の絶対パス組み立て
             var fullPath = Path.Combine(projectDir, targetInfo.Value.SubDir, cleanRelativePath);
 
             var targetDir = Path.GetDirectoryName(fullPath);
@@ -135,7 +142,7 @@ public class OpenSqlFileMenuExtension : MenuExtension
                 File.WriteAllText(fullPath, $"-- Query File: {cleanRelativePath}\n");
             }
 
-            // 6. 規定アプリまたはプログラムから開くダイアログ
+            // 7. 規定アプリまたはプログラムから開くダイアログ
             OpenFileWithDefaultApp(fullPath);
         }
         catch (Exception ex)
@@ -144,25 +151,59 @@ public class OpenSqlFileMenuExtension : MenuExtension
         }
     }
 
-    private static List<object> GetSelectedObjects(object? editor)
+    private static List<object> GetSelectedObjectsFromActiveTab(object? activeTab)
     {
         var result = new List<object>();
+        if (activeTab == null) return result;
+
+        var editorProp = activeTab.GetType().GetProperty("Editor", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        var editor = editorProp?.GetValue(activeTab);
         if (editor == null) return result;
 
-        var props = new[] { "SelectedObjects", "Selection", "SelectedElements" };
-        foreach (var pName in props)
+        var editorType = editor.GetType();
+
+        // 1. Selection プロパティを確認 (Mendix.Modeler.Common.Selection)
+        var selectionProp = editorType.GetProperty("Selection", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        var selection = selectionProp?.GetValue(editor);
+        if (selection != null)
         {
-            var p = editor.GetType().GetProperty(pName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-            var val = p?.GetValue(editor);
-            if (val is IEnumerable list && !(val is string))
+            if (selection is IEnumerable selEnum && !(selection is string))
             {
-                foreach (var item in list)
+                foreach (var item in selEnum)
                 {
                     if (item != null) result.Add(item);
                 }
-                if (result.Count > 0) return result;
+            }
+            else
+            {
+                // Selection オブジェクト内部のコレクションプロパティ（Objects, Elements など）を走査
+                foreach (var p in selection.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                {
+                    if (p.GetIndexParameters().Length > 0) continue;
+                    try
+                    {
+                        var val = p.GetValue(selection);
+                        if (val is IEnumerable list && !(val is string))
+                        {
+                            foreach (var item in list)
+                            {
+                                if (item != null) result.Add(item);
+                            }
+                        }
+                    }
+                    catch { }
+                }
             }
         }
+
+        // 2. SelectedObject プロパティを確認
+        var selectedObjProp = editorType.GetProperty("SelectedObject", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        var selectedObj = selectedObjProp?.GetValue(editor);
+        if (selectedObj != null && !result.Contains(selectedObj))
+        {
+            result.Add(selectedObj);
+        }
+
         return result;
     }
 
@@ -191,10 +232,13 @@ public class OpenSqlFileMenuExtension : MenuExtension
         return matches;
     }
 
-    private static (string RawPath, string SubDir)? ExtractFileInfoFromObject(object mfObj)
+    private static (string RawPath, string SubDir)? ExtractFileInfoFromObject(object targetObj)
     {
-        var actionProp = mfObj.GetType().GetProperty("Action", BindingFlags.Public | BindingFlags.Instance);
-        var action = actionProp?.GetValue(mfObj) ?? mfObj;
+        if (targetObj == null) return null;
+
+        // ActionActivity またはその内部の Action を取得
+        var actionProp = targetObj.GetType().GetProperty("Action", BindingFlags.Public | BindingFlags.Instance);
+        var action = actionProp?.GetValue(targetObj) ?? targetObj;
 
         var mappingsProp = action.GetType().GetProperty("ParameterMappings", BindingFlags.Public | BindingFlags.Instance);
         var mappings = mappingsProp?.GetValue(action) as IEnumerable;

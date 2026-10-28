@@ -10,3 +10,4 @@ C:\github\MxTwoWaySqlExtension\src\obj\Release\net10.0\src.dll
 C:\github\MxTwoWaySqlExtension\src\obj\Release\net10.0\refint\src.dll
 C:\github\MxTwoWaySqlExtension\src\obj\Release\net10.0\src.pdb
 C:\github\MxTwoWaySqlExtension\src\obj\Release\net10.0\ref\src.dll
+C:\github\MxTwoWaySqlExtension\src\obj\Release\net10.0\src.sourcelink.json
