@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("MxTwoWaySqlExtension")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e272058b70570c46bd532c3ea4f0a83327c6e00e")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a1e6ca3eea2d31ecd209ea4a81bb860a85c0b672")]
 [assembly: System.Reflection.AssemblyProductAttribute("MxTwoWaySqlExtension")]
 [assembly: System.Reflection.AssemblyTitleAttribute("MxTwoWaySqlExtension")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

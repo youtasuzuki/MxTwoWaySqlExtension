@@ -11,3 +11,4 @@ C:\github\MxTwoWaySqlExtension\src\obj\Release\net10.0\MxTwoWaySqlExtension.dll
 C:\github\MxTwoWaySqlExtension\src\obj\Release\net10.0\refint\MxTwoWaySqlExtension.dll
 C:\github\MxTwoWaySqlExtension\src\obj\Release\net10.0\MxTwoWaySqlExtension.pdb
 C:\github\MxTwoWaySqlExtension\src\obj\Release\net10.0\ref\MxTwoWaySqlExtension.dll
+C:\github\MxTwoWaySqlExtension\src\bin\Release\net10.0\extension.json

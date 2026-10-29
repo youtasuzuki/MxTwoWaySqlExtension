@@ -11,5 +11,10 @@
   <ItemGroup>
     <PackageReference Include="Mendix.StudioPro.ExtensionsAPI" Version="11.12.0" />
   </ItemGroup>
-
+  
+  <ItemGroup>
+    <None Update="extension.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 </Project>

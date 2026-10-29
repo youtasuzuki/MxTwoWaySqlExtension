@@ -1,0 +1,19 @@
+{
+  "enabled": false,
+  "mocks": [
+    {
+      "dataSourceName": "YourAppsExtDataSourceName",
+      "tableName": "YourAppsTableName",
+      "paramOrDtoType": "ModuleName.EntityName",
+      "excelPath": "You_can_use_variable_$RESOURCES_or_$TWSMOCKER_or_$HOME_to_complement_the_path.",
+      "sheetName": "If_omitted_tableName_is_used."
+    },
+    {
+      "dataSourceName": "EXT_DB",
+      "tableName": "EMPLOYEE",
+      "paramOrDtoType": "MyFirstModule.ExtEmployee",
+      "excelPath": "$RESOURCES/sql/mockdata/employee_data.xlsx",
+      "sheetName": "EMPLOYEE"
+    }
+  ]
+}

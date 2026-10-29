@@ -1,0 +1,4 @@
+{
+  "mx_extensions": [ "MxTwoWaySqlExtension.dll" ],
+  "mx_build_extensions": []
+}
