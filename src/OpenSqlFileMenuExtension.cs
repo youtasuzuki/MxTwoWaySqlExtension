@@ -26,7 +26,8 @@ public class OpenSqlFileMenuExtension : MenuExtension, IDisposable
     private static readonly (string ParamKey, string SubDir)[] SupportedActions = new[]
     {
         ("twowaysqlfilename", Path.Combine("resources", "sql")),
-        ("saferoqlfilename", Path.Combine("resources", "saferoql"))
+        ("saferoqlfilename", Path.Combine("resources", "saferoql")),
+        ("templatefilepath", "resources")
     };
 
     // --- Win32 API 定義 ---
@@ -99,9 +100,16 @@ public class OpenSqlFileMenuExtension : MenuExtension, IDisposable
     private const int VK_L = 0x4C;
 
     private const uint MB_OK = 0x00000000;
+    private const uint MB_YESNO = 0x00000004;
     private const uint MB_ICONERROR = 0x00000010;
+    private const uint MB_ICONQUESTION = 0x00000020;
     private const uint MB_ICONWARNING = 0x00000030;
     private const uint MB_ICONINFORMATION = 0x00000040;
+    private const uint MB_TOPMOST = 0x00040000;
+    private const uint MB_SETFOREGROUND = 0x00010000;
+
+    private const int IDYES = 6;
+    private const int IDNO = 7;
 
     private uint _hookThreadId;
 
@@ -175,7 +183,7 @@ public class OpenSqlFileMenuExtension : MenuExtension, IDisposable
     public override IEnumerable<MenuViewModel> GetMenus()
     {
         yield return new MenuViewModel(
-            "Open SQL/OQL File in External Editor (Ctrl+Shift+L)",
+            "Open SQL/OQL/jXLS File in External Editor (Ctrl+Shift+L)",
             Execute
         );
     }
@@ -240,7 +248,7 @@ public class OpenSqlFileMenuExtension : MenuExtension, IDisposable
 
                 if (allMatches.Count == 0)
                 {
-                    ShowDialog("No TwoWaySQL or SaferOQL action found in the current Microflow.", MB_ICONINFORMATION);
+                    ShowDialog("No TwoWaySQL, SaferOQL, or jXLS action found in the current Microflow.", MB_ICONINFORMATION);
                     return;
                 }
 
@@ -258,27 +266,53 @@ public class OpenSqlFileMenuExtension : MenuExtension, IDisposable
                                                            .Replace('/', Path.DirectorySeparatorChar)
                                                            .Replace('\\', Path.DirectorySeparatorChar);
 
-            // 6. resources/ 配下の絶対パス組み立て
+            // 6. resources/ 配下の絶対パスおよび対象ディレクトリ組み立て
             var fullPath = Path.Combine(projectDir, targetInfo.Value.SubDir, cleanRelativePath);
+            var targetDir = Path.GetDirectoryName(fullPath) ?? Path.Combine(projectDir, targetInfo.Value.SubDir);
 
-            var targetDir = Path.GetDirectoryName(fullPath);
-            if (!string.IsNullOrEmpty(targetDir) && !Directory.Exists(targetDir))
-            {
-                Directory.CreateDirectory(targetDir);
-            }
-
+            // 7. ファイルおよび配置先フォルダの存在チェック
             if (!File.Exists(fullPath))
             {
-                File.WriteAllText(fullPath, $"-- Query File: {cleanRelativePath}\n");
+                var ownerHwnd = GetForegroundWindow();
+
+                // 配置先フォルダ自体が存在しない場合は、作成せず警告を出して終了
+                if (!Directory.Exists(targetDir))
+                {
+                    var notFoundMessage = $"The specified file does not exist, and target folder was not found:\n{targetDir}\n\nOperation aborted.";
+                    ShowDialog(notFoundMessage, MB_OK | MB_ICONWARNING);
+                    return;
+                }
+
+                // フォルダは存在する場合のみ、エクスプローラーで開くか確認
+                var message = $"File not found:\n{cleanRelativePath}\n\nWould you like to open the target folder in File Explorer?\n({targetDir})";
+                int result = ShowDialog(message, MB_YESNO | MB_ICONQUESTION);
+
+                if (result == IDYES)
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "explorer.exe",
+                        Arguments = $"\"{targetDir}\"",
+                        UseShellExecute = true
+                    });
+                }
+
+                return;
             }
 
-            // 7. 規定アプリまたはプログラムから開くダイアログ
+            // 8. ファイルが存在する場合は規定アプリまたはプログラムから開く
             OpenFileWithDefaultApp(fullPath);
         }
         catch (Exception ex)
         {
             ShowDialog($"An error occurred:\n{ex.Message}", MB_ICONERROR);
         }
+    }
+
+    private static int ShowDialog(string message, uint flags)
+    {
+        var ownerHwnd = GetForegroundWindow();
+        return Win32MessageBox(ownerHwnd, message, "TwoWaySQL / SaferOQL Extension", flags | MB_SETFOREGROUND | MB_TOPMOST);
     }
 
     private static List<object> GetSelectedObjectsFromActiveTab(object? activeTab)
@@ -292,43 +326,23 @@ public class OpenSqlFileMenuExtension : MenuExtension, IDisposable
 
         var editorType = editor.GetType();
 
+        // Mendix.Modeler.Common.Selection オブジェクトの Objects から取得
         var selectionProp = editorType.GetProperty("Selection", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
         var selection = selectionProp?.GetValue(editor);
+
         if (selection != null)
         {
-            if (selection is IEnumerable selEnum && !(selection is string))
+            var objectsProp = selection.GetType().GetProperty("Objects", BindingFlags.Public | BindingFlags.Instance);
+            if (objectsProp?.GetValue(selection) is IEnumerable objects)
             {
-                foreach (var item in selEnum)
+                foreach (var item in objects)
                 {
-                    if (item != null) result.Add(item);
-                }
-            }
-            else
-            {
-                foreach (var p in selection.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
-                {
-                    if (p.GetIndexParameters().Length > 0) continue;
-                    try
+                    if (item != null)
                     {
-                        var val = p.GetValue(selection);
-                        if (val is IEnumerable list && !(val is string))
-                        {
-                            foreach (var item in list)
-                            {
-                                if (item != null) result.Add(item);
-                            }
-                        }
+                        result.Add(item);
                     }
-                    catch { }
                 }
             }
-        }
-
-        var selectedObjProp = editorType.GetProperty("SelectedObject", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-        var selectedObj = selectedObjProp?.GetValue(editor);
-        if (selectedObj != null && !result.Contains(selectedObj))
-        {
-            result.Add(selectedObj);
         }
 
         return result;
@@ -426,11 +440,6 @@ public class OpenSqlFileMenuExtension : MenuExtension, IDisposable
             };
             Process.Start(psi);
         }
-    }
-
-    private static void ShowDialog(string message, uint iconType)
-    {
-        Win32MessageBox(IntPtr.Zero, message, "TwoWaySQL / SaferOQL Extension", MB_OK | iconType);
     }
 
     public void Dispose()

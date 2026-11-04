@@ -6,6 +6,9 @@
     <Nullable>enable</Nullable>
     <AssemblyName>MxTwoWaySqlExtension</AssemblyName>
     <RootNamespace>MxTwoWaySqlExtension</RootNamespace>
+    <!-- Mendix SDK由来の既知の推移的パッケージ警告を無視 -->
+    <NoWarn>$(NoWarn);NU1902</NoWarn>
+    <NoWarn>$(NoWarn);NU1903</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
