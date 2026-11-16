@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "dgSpecHash": "86Zo7TIc4mQ=",
+  "success": true,
+  "projectFilePath": "C:\\github\\MxTwoWaySqlExtension\\src_v1024\\MxTwoWaySqlExtension.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\s41705\\.nuget\\packages\\mendix.studiopro.extensionsapi\\11.0.0\\mendix.studiopro.extensionsapi.11.0.0.nupkg.sha512",
+    "C:\\Users\\s41705\\.nuget\\packages\\microsoft.extensions.objectpool\\8.0.10\\microsoft.extensions.objectpool.8.0.10.nupkg.sha512",
+    "C:\\Users\\s41705\\.nuget\\packages\\system.componentmodel.composition\\8.0.0\\system.componentmodel.composition.8.0.0.nupkg.sha512",
+    "C:\\Users\\s41705\\.nuget\\packages\\system.security.cryptography.pkcs\\8.0.1\\system.security.cryptography.pkcs.8.0.1.nupkg.sha512",
+    "C:\\Users\\s41705\\.nuget\\packages\\system.security.cryptography.xml\\8.0.2\\system.security.cryptography.xml.8.0.2.nupkg.sha512",
+    "C:\\Users\\s41705\\.nuget\\packages\\system.servicemodel.primitives\\8.1.0\\system.servicemodel.primitives.8.1.0.nupkg.sha512",
+    "C:\\Users\\s41705\\.nuget\\packages\\microsoft.netcore.app.ref\\8.0.33\\microsoft.netcore.app.ref.8.0.33.nupkg.sha512",
+    "C:\\Users\\s41705\\.nuget\\packages\\microsoft.windowsdesktop.app.ref\\8.0.33\\microsoft.windowsdesktop.app.ref.8.0.33.nupkg.sha512",
+    "C:\\Users\\s41705\\.nuget\\packages\\microsoft.aspnetcore.app.ref\\8.0.33\\microsoft.aspnetcore.app.ref.8.0.33.nupkg.sha512"
+  ],
+  "logs": []
+}
