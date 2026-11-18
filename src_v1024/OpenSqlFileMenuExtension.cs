@@ -27,7 +27,8 @@ public class OpenSqlFileMenuExtension : MenuExtension, IDisposable
     {
         ("twowaysqlfilename", Path.Combine("resources", "sql")),
         ("saferoqlfilename", Path.Combine("resources", "saferoql")),
-        ("templatefilepath", "resources")
+        ("templatefilepath", "resources"),
+        ("excelfilepath", null)
     };
 
     // --- Win32 API 定義 ---
@@ -276,14 +277,36 @@ public class OpenSqlFileMenuExtension : MenuExtension, IDisposable
                 targetInfo = allMatches[0];
             }
 
-            // 5. パスの正規化
-            var cleanRelativePath = targetInfo.Value.RawPath.Trim('\'', '"', ' ', '\r', '\n')
-                                                           .Replace('/', Path.DirectorySeparatorChar)
-                                                           .Replace('\\', Path.DirectorySeparatorChar);
+            // 5 & 6. パスの正規化および解決
+            var cleanRelativePath = targetInfo.Value.RawPath.Trim('\'', '"', ' ', '\r', '\n');
+            string fullPath;
 
-            // 6. resources/ 配下の絶対パスおよび対象ディレクトリ組み立て
-            var fullPath = Path.Combine(projectDir, targetInfo.Value.SubDir, cleanRelativePath);
-            var targetDir = Path.GetDirectoryName(fullPath) ?? Path.Combine(projectDir, targetInfo.Value.SubDir);
+            if (targetInfo.Value.SubDir == null)
+            {
+                // excelFilePath 用：Java の convertPath 相当の変数展開を実施
+                var mxdbunitEnv = Environment.GetEnvironmentVariable("MXDBUNIT") ?? "";
+                var homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? "";
+                var resourcesPath = Path.Combine(projectDir, "resources");
+
+                var converted = cleanRelativePath.Replace("\\", "/")
+                                                 .Replace("$MXDBUNIT", mxdbunitEnv)
+                                                 .Replace("$HOME", homeDir)
+                                                 .Replace("$RESOURCES", resourcesPath)
+                                                 .Replace('/', Path.DirectorySeparatorChar);
+
+                fullPath = Path.IsPathRooted(converted)
+                    ? Path.GetFullPath(converted)
+                    : Path.Combine(projectDir, converted);
+            }
+            else
+            {
+                // TwoWaySQL / SaferOQL / jXLS 用：指定の SubDir 配下で解決
+                var normalized = cleanRelativePath.Replace('/', Path.DirectorySeparatorChar)
+                                                  .Replace('\\', Path.DirectorySeparatorChar);
+                fullPath = Path.Combine(projectDir, targetInfo.Value.SubDir, normalized);
+            }
+
+            var targetDir = Path.GetDirectoryName(fullPath) ?? projectDir;
 
             // 7. ファイルおよび配置先フォルダの存在チェック
             if (!File.Exists(fullPath))
